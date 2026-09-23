@@ -33,7 +33,8 @@ ARG CONDA_ENV_DIR="/home/conda_envs"
 # time. CI (deploy.yaml) generates and publishes them as release assets. For a
 # local build first run, from the repo root:
 #   conda-lock lock --file nemo-image-env.yaml \
-#     --channel tidywf --channel conda-forge -p linux-64 -p linux-aarch64
+#     --channel tidywf/label/dev --channel tidywf --channel conda-forge \
+#     -p linux-64 -p linux-aarch64
 #   for p in linux-64 linux-aarch64; do
 #     conda-lock render -p ${p} conda-lock.yml && mv conda-${p}.lock .; done
 COPY "./conda-linux-64.lock" "./conda-linux-aarch64.lock" "${CONDA_ENV_DIR}/"

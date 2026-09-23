@@ -1,8 +1,10 @@
 name: nemo_env
 channels:
+  # 4-part dev versions (x.y.z.9XXX) are uploaded under the dev label only.
+  - tidywf/label/dev
   - tidywf
   - conda-forge
 dependencies:
-  - r-nemo ==0.1.0.9004 # bump
-  - r-tidywigits ==0.1.0.9000 # bump
-  - r-tidydragen ==0.0.0.9002 # bump
+  - r-nemo ==0.1.0.9004
+  - r-tidywigits ==0.1.0.9000
+  - r-tidydragen ==0.0.0.9002

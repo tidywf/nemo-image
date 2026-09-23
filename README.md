@@ -89,7 +89,8 @@ bump commit. Run it bare to preview the message first.
 
 ```shell
 conda-lock lock --file nemo-image-env.yaml \
-  --channel tidywf --channel conda-forge -p linux-64 -p linux-aarch64
+  --channel tidywf/label/dev --channel tidywf --channel conda-forge \
+  -p linux-64 -p linux-aarch64
 for p in linux-64 linux-aarch64; do
   conda-lock render -p ${p} conda-lock.yml && mv conda-${p}.lock .
 done

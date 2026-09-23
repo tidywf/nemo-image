@@ -80,6 +80,7 @@ jobs:
           set -euo pipefail
           conda-lock lock \
             --file nemo-image-env.yaml \
+            --channel tidywf/label/dev \
             --channel tidywf \
             --channel conda-forge \
             -p linux-64 \
