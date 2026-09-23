@@ -116,6 +116,23 @@ jobs:
               --notes "Automated release for ${tag}." \
               "${assets[@]}"
           fi
+          # `gh release create` has been seen to report success while leaving a
+          # release with no assets, and dockerise cannot build without them.
+          # Fail here, in the job that published, rather than downstream. The
+          # per-release assets endpoint is used because the `assets` array
+          # embedded in the release object is served from a cache that
+          # intermittently comes back empty.
+          rel_id=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}" --jq '.id')
+          names=$(gh api "repos/${GITHUB_REPOSITORY}/releases/${rel_id}/assets?per_page=100" --jq '.[].name')
+          for plat in linux-64 linux-aarch64; do
+            want="nemo-image-${tag}-conda-${plat}.lock"
+            if ! grep -qxF "${want}" <<< "${names}"; then
+              echo "Asset ${want} is missing from release ${tag}. Present:" >&2
+              echo "${names:-(none)}" >&2
+              exit 1
+            fi
+          done
+          echo "Verified both lockfile assets on release ${tag}."
 
   dockerise:
     name: 🐳 Dockerise
