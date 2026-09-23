@@ -74,7 +74,7 @@ jobs:
           auto-update-conda: true
           environment-file: lock-env.yaml
           activate-environment: lock_env
-          miniforge-version: 26.7.2-0
+          miniforge-version: 26.1.0-0 # need to use mamba < 2.6.0 - see conda/conda-lock#906
       - name: 🔒 Conda lock
         run: |
           set -euo pipefail
