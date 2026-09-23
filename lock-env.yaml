@@ -1,0 +1,5 @@
+name: lock_env
+channels:
+  - conda-forge
+dependencies:
+  - conda-lock

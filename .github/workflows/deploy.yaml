@@ -1,0 +1,131 @@
+name: docker
+
+on:
+  push:
+    tags:
+      # 3-part main (vX.Y.Z) and 4-part dev (vX.Y.Z.9XXX) releases only.
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+.[0-9]+"
+
+jobs:
+  prep:
+    name: 📋 Version
+    runs-on: ubuntu-latest
+    outputs:
+      pkg_version: ${{ steps.v.outputs.pkg_version }}
+      nemo_version: ${{ steps.pins.outputs.nemo_version }}
+      tidywigits_version: ${{ steps.pins.outputs.tidywigits_version }}
+      tidydragen_version: ${{ steps.pins.outputs.tidydragen_version }}
+    steps:
+      - id: v
+        shell: bash
+        run: |
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+            echo "Expected tag of the form vX.Y.Z or vX.Y.Z.9XXX, got '$GITHUB_REF_NAME'" >&2
+            exit 1
+          fi
+          echo "pkg_version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - name: 🚚 Codeout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.ref_name }}
+          persist-credentials: false
+      # The image tag is this repo's own version, so the bundled r-* versions
+      # are surfaced as OCI labels instead (see Dockerfile). Parse them from
+      # the single source of truth: the env yaml's pins.
+      - id: pins
+        name: 📌 Read pins
+        shell: bash
+        run: |
+          set -euo pipefail
+          f="nemo-image-env.yaml"
+          for p in nemo tidywigits tidydragen; do
+            v=$(sed -nE "s|^[[:space:]]*-[[:space:]]*r-${p}[[:space:]]*==[[:space:]]*([^[:space:]#]+).*|\1|p" "${f}")
+            if [[ -z "${v}" || $(wc -l <<< "${v}") -ne 1 ]]; then
+              echo "Expected exactly one 'r-${p} ==<version>' pin in ${f}, got '${v}'" >&2
+              exit 1
+            fi
+            echo "${p}_version=${v}" >> "$GITHUB_OUTPUT"
+          done
+
+  # Pins already-released r-nemo/r-tidywigits/r-tidydragen versions and locks that env.
+  # Lockfiles are published as release assets in the same naming dockerise.yaml
+  # expects (<pkg_name>-v<version>-conda-<plat>.lock).
+  lock:
+    name: 🔒 Lock
+    needs: [prep]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -l {0}
+    permissions:
+      contents: write
+    env:
+      INPUTS_PKG_VERSION: ${{ needs.prep.outputs.pkg_version }}
+    steps:
+      - name: 🚚 Codeout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: v${{ needs.prep.outputs.pkg_version }}
+          persist-credentials: false
+      - name: 👾 Miniforge setup
+        uses: conda-incubator/setup-miniconda@be893c923ea9cf1cf7cd510fbdde27c7e18cbdcb # v4.1.0
+        with:
+          auto-update-conda: true
+          environment-file: lock-env.yaml
+          activate-environment: lock_env
+          miniforge-version: 26.7.2-0
+      - name: 🔒 Conda lock
+        run: |
+          set -euo pipefail
+          conda-lock lock \
+            --file nemo-image-env.yaml \
+            --channel tidywf \
+            --channel conda-forge \
+            -p linux-64 \
+            -p linux-aarch64
+          for plat in linux-64 linux-aarch64; do
+            conda-lock render -p ${plat} conda-lock.yml \
+              && mv conda-${plat}.lock "${RUNNER_TEMP}/"
+          done
+          rm conda-lock.yml
+      - name: 📦 Publish lockfiles to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="v${INPUTS_PKG_VERSION}"
+          prerelease=""
+          if [[ "${INPUTS_PKG_VERSION}" == *.*.*.* ]]; then
+            prerelease="--prerelease"
+          fi
+          assets=()
+          for plat in linux-64 linux-aarch64; do
+            dst="${RUNNER_TEMP}/nemo-image-${tag}-conda-${plat}.lock"
+            cp "${RUNNER_TEMP}/conda-${plat}.lock" "${dst}"
+            assets+=("${dst}")
+          done
+          if gh release view "${tag}" --json tagName >/dev/null 2>&1; then
+            gh release upload "${tag}" "${assets[@]}" --clobber
+          else
+            gh release create "${tag}" \
+              --verify-tag \
+              ${prerelease} \
+              --title "${tag}" \
+              --notes "Automated release for ${tag}." \
+              "${assets[@]}"
+          fi
+
+  dockerise:
+    name: 🐳 Dockerise
+    needs: [prep, lock]
+    uses: tidywf/actions/.github/workflows/dockerise.yaml@main
+    permissions:
+      contents: read # gh release download (fresh lockfiles)
+      packages: write
+    with:
+      pkg_version: ${{ needs.prep.outputs.pkg_version }}
+      build_args: |
+        NEMO_VERSION=${{ needs.prep.outputs.nemo_version }}
+        TIDYWIGITS_VERSION=${{ needs.prep.outputs.tidywigits_version }}
+        TIDYDRAGEN_VERSION=${{ needs.prep.outputs.tidydragen_version }}
