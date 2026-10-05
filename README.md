@@ -11,57 +11,51 @@ docker run --rm -v "$PWD:/work" -w /work ghcr.io/tidywf/nemo-image:<version> \
   tidy --workflow dragen -d inputs/dragen/ -o /outputs/tidydragen
 ```
 
-The conda env pins specific already-released versions of [r-nemo], [r-tidywigits] and
-[r-tidydragen] (from the [tidywf anaconda channel]) and a Dockerfile that bakes
-that env into an image.
+The image bakes in a conda env that pins specific already-released versions of
+[r-nemo], [r-tidywigits] and [r-tidydragen] from the [tidywf anaconda channel].
+The bundled versions are recorded as OCI labels
+(`io.tidywf.{nemo,tidywigits,tidydragen}.version`):
+
+```shell
+docker inspect --format '{{json .Config.Labels}}' ghcr.io/tidywf/nemo-image:<version>
+```
 
 ## Files
 
-- `Dockerfile`: two-stage build that installs miniforge + the pinned conda env in
-  a builder stage, then copies just the env into a slim
-  `quay.io/bioconda/base-glibc-debian-bash` final image. Entrypoint is `nemo.R`.
-- `nemo-image-env.yaml`: pins the `r-nemo` / `r-tidywigits` / `r-tidydragen`
-  versions this image bundles. Bump these by hand, then tag a release.
-- `lock-env.yaml`: env used by CI to run `conda-lock`.
-- `scripts/pin-msg.sh`: generates a commit message from the pin changes.
-- `.github/workflows/deploy.yaml`: on a `vX.Y.Z(.9XXX)` tag push, locks
-  `nemo-image-env.yaml` with `conda-lock`, publishes the lockfiles as release
-  assets, then builds and pushes the image via the reusable
-  `tidywf/actions/dockerise.yaml` workflow.
+| File | Purpose |
+| ---- | ------- |
+| `Dockerfile` | Two-stage build: `condaforge/miniforge3` builder creates the env from the lockfile, then only the env is copied into a slim `quay.io/bioconda/base-glibc-debian-bash` image. Entrypoint is `nemo.R`. |
+| `nemo-image-env.yaml` | Pins the `r-nemo` / `r-tidywigits` / `r-tidydragen` versions this image bundles. Bumped by hand. |
+| `lock-env.yaml` | Env CI uses to run `conda-lock`. |
+| `scripts/pin-msg.sh` | Generates a commit message from the pin changes. |
+| `.github/workflows/deploy.yaml` | On a `vX.Y.Z(.9XXX)` tag push: locks `nemo-image-env.yaml`, publishes the lockfiles as release assets, then builds and pushes the image via the reusable `tidywf/actions` `dockerise.yaml`. |
 
-## Versioning
+## Releasing
 
-The git tag is the version, and it's independent of nemo/tidywigits/tidydragen's
-own version numbers. To cut a release:
-
-1. Bump the pinned versions in `nemo-image-env.yaml`
-2. Commit, tag `vX.Y.Z`, push the tag, then `deploy.yaml` does the rest
+The git tag is the image version, independent of nemo/tidywigits/tidydragen's
+own versions. Only `vX.Y.Z` and `vX.Y.Z.9XXX` tags trigger a build (the 4-part
+dev form is published as a GitHub pre-release); pushing to `main` builds nothing.
 
 ```shell
-# 1. bump the r-* pins, then commit. Every CI job checks out the tag, so the
+# 1. Bump the r-* pins, then commit. Every CI job checks out the tag, so the
 #    bump must be in the commit the tag points at.
 git add nemo-image-env.yaml
-git commit -F <(scripts/pin-msg.sh)   # see below; or write your own message
+git commit -F <(scripts/pin-msg.sh)   # or write your own message
 git push
 
-# 2. tag and push the tag. This is the only thing that triggers deploy.yaml.
+# 2. Tag and push the tag. This is the only thing that triggers deploy.yaml.
 git tag v0.1.0
 git push origin v0.1.0
-```
 
-Only `vX.Y.Z` and `vX.Y.Z.9XXX` tags trigger a build; the 4-part dev form is
-published as a GitHub pre-release. Pushing to `main` builds nothing.
-
-Watch the run, then confirm what landed:
-
-```shell
+# 3. Watch the run.
 gh run watch
-docker inspect --format '{{json .Config.Labels}}' ghcr.io/tidywf/nemo-image:0.1.0
 ```
 
-To redo a botched tag, delete it locally and remotely (and delete the GitHub
-Release it created, since `gh release create --verify-tag` won't overwrite a
-release whose tag has moved), then re-tag:
+### Redoing a botched tag
+
+Delete the tag locally and remotely, plus the GitHub Release it created
+(`gh release create --verify-tag` won't overwrite a release whose tag has
+moved), then re-tag:
 
 ```shell
 git tag -d v0.1.0
@@ -69,8 +63,10 @@ git push origin :refs/tags/v0.1.0
 gh release delete v0.1.0 --yes
 ```
 
-`scripts/pin-msg.sh` builds that message from the yaml itself. It diffs the
-working-tree pins against the last committed ones and prints, for example:
+### Commit message helper
+
+`scripts/pin-msg.sh` diffs the working-tree pins against the last committed
+ones and prints, for example:
 
 ```
 pin r-nemo 0.2.0, r-tidydragen 0.1.0
@@ -86,6 +82,10 @@ body. It exits non-zero if nothing changed, so it will not produce an empty
 bump commit. Run it bare to preview the message first.
 
 ## Local build
+
+Lockfiles aren't committed, so generate them into the repo root first (or
+`gh release download vX.Y.Z` an existing release's assets and strip the
+`nemo-image-vX.Y.Z-` prefix):
 
 ```shell
 conda-lock lock --file nemo-image-env.yaml \

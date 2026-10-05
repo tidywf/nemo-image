@@ -5,6 +5,6 @@ channels:
   - tidywf
   - conda-forge
 dependencies:
-  - r-nemo ==0.1.0.9004
-  - r-tidywigits ==0.1.0.9000
-  - r-tidydragen ==0.0.0.9002
+  - r-nemo ==0.1.0.9007
+  - r-tidywigits ==0.1.0.9003
+  - r-tidydragen ==0.0.0.9005

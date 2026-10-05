@@ -31,7 +31,7 @@ jobs:
           ref: ${{ github.ref_name }}
           persist-credentials: false
       # The image tag is this repo's own version, so the bundled r-* versions
-      # are surfaced as OCI labels instead (see Dockerfile). Parse them from
+      # are surfaced as OCI labels instead (see dockerise below). Parse them from
       # the single source of truth: the env yaml's pins.
       - id: pins
         name: 📌 Read pins
@@ -48,7 +48,7 @@ jobs:
             echo "${p}_version=${v}" >> "$GITHUB_OUTPUT"
           done
 
-  # Pins already-released r-nemo/r-tidywigits/r-tidydragen versions and locks that env.
+  # Pins already-released r-pkg versions and locks that env.
   # Lockfiles are published as release assets in the same naming dockerise.yaml
   # expects (<pkg_name>-v<version>-conda-<plat>.lock).
   lock:
@@ -71,7 +71,7 @@ jobs:
       - name: 👾 Miniforge setup
         uses: conda-incubator/setup-miniconda@be893c923ea9cf1cf7cd510fbdde27c7e18cbdcb # v4.1.0
         with:
-          auto-update-conda: true
+          auto-update-conda: false # keep the pinned Miniforge base
           environment-file: lock-env.yaml
           activate-environment: lock_env
           miniforge-version: 26.1.0-0 # need to use mamba < 2.6.0 - see conda/conda-lock#906
@@ -86,8 +86,9 @@ jobs:
             -p linux-64 \
             -p linux-aarch64
           for plat in linux-64 linux-aarch64; do
-            conda-lock render -p ${plat} conda-lock.yml \
-              && mv conda-${plat}.lock "${RUNNER_TEMP}/"
+            # Separate lines: set -e ignores a failure on the left of &&.
+            conda-lock render -p "${plat}" conda-lock.yml
+            mv "conda-${plat}.lock" "${RUNNER_TEMP}/"
           done
           rm conda-lock.yml
       - name: 📦 Publish lockfiles to release
@@ -108,6 +109,10 @@ jobs:
           done
           if gh release view "${tag}" --json tagName >/dev/null 2>&1; then
             gh release upload "${tag}" "${assets[@]}" --clobber
+            # Release may predate this run (e.g. created by hand); still flag dev.
+            if [[ -n "${prerelease}" ]]; then
+              gh release edit "${tag}" --prerelease
+            fi
           else
             gh release create "${tag}" \
               --verify-tag \
@@ -139,11 +144,17 @@ jobs:
     needs: [prep, lock]
     uses: tidywf/actions/.github/workflows/dockerise.yaml@main
     permissions:
-      contents: read # gh release download (fresh lockfiles)
+      contents: read # release assets API (fresh lockfiles)
       packages: write
     with:
       pkg_version: ${{ needs.prep.outputs.pkg_version }}
-      build_args: |
-        NEMO_VERSION=${{ needs.prep.outputs.nemo_version }}
-        TIDYWIGITS_VERSION=${{ needs.prep.outputs.tidywigits_version }}
-        TIDYDRAGEN_VERSION=${{ needs.prep.outputs.tidydragen_version }}
+      # OCI labels + annotations (shown on ghcr.io); override the GitHub repo
+      # defaults. The image tag is this repo's own version, so the bundled
+      # r-* versions ride as io.tidywf.* labels.
+      labels: |
+        org.opencontainers.image.authors=peterdiakumis@gmail.com
+        org.opencontainers.image.description=bundled nemo + tidywigits + tidydragen
+        org.opencontainers.image.licenses=MIT
+        io.tidywf.nemo.version=${{ needs.prep.outputs.nemo_version }}
+        io.tidywf.tidywigits.version=${{ needs.prep.outputs.tidywigits_version }}
+        io.tidywf.tidydragen.version=${{ needs.prep.outputs.tidydragen_version }}

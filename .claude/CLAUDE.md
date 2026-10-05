@@ -17,7 +17,7 @@ Prospective consumer: `nemo-infra`'s Lambda, which extends
 ## Structure
 
 ```
-Dockerfile                     # miniforge builder -> slim final, ENTRYPOINT nemo.R
+Dockerfile                     # miniforge3 image builder -> slim final, ENTRYPOINT nemo.R
 nemo-image-env.yaml            # pins r-nemo / r-tidywigits / r-tidydragen
 lock-env.yaml                  # conda-lock's own env, CI only
 scripts/pin-msg.sh             # commit message from pin diff (dev convenience)
@@ -37,10 +37,13 @@ scripts/pin-msg.sh             # commit message from pin diff (dev convenience)
   the ones in the env file, so both must agree).
 - **Bundled versions ride as OCI labels, not in the tag.** The tag is this
   repo's own version; `deploy.yaml`'s `prep` job parses the pins and passes
-  them as build args → `io.tidywf.{nemo,tidywigits,tidydragen}.version`.
+  them as dockerise `labels:` → `io.tidywf.{nemo,tidywigits,tidydragen}.version`
+  (no Dockerfile LABELs; local builds carry none).
   Inspect with `docker inspect --format '{{json .Config.Labels}}'`.
-- **Miniforge SHA256s** are pinned per arch; bump together with
-  `MINIF_VERSION`.
+- **Builder is `condaforge/miniforge3`**, pinned by multi-arch index digest
+  (`MINIF_DIGEST`); bump together with `MINIF_VERSION`. The env is created
+  with `conda create -p` at the final-stage prefix (`/opt/miniforge/envs/nemo_env`)
+  since conda envs are not relocatable. Mirrors `tidywigits/Dockerfile`.
 - **Lockfiles aren't committed.** CI generates them and attaches them to the
   Release; the Dockerfile `COPY`s them from the build context root (local
   build command is in the Dockerfile comment).
