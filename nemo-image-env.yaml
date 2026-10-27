@@ -6,7 +6,6 @@ channels:
   - conda-forge
 dependencies:
   - r-nemo ==0.2.0
-  - r-tidywigits ==0.2.0
+  - r-tidywigits ==0.2.1
   - r-tidydragen ==0.1.0
-  # `nemo.R sync` shells out to `aws s3 sync`.
-  - awscli
+  - awscli # for s3 sync
