@@ -51,17 +51,18 @@ git push origin v0.1.0
 gh run watch
 ```
 
-### Redoing a botched tag
+### Botched tags: fix forward, never re-tag
 
-Delete the tag locally and remotely, plus the GitHub Release it created
-(`gh release create --verify-tag` won't overwrite a release whose tag has
-moved), then re-tag:
+The tidywf org enforces immutable releases on this repo. `deploy.yaml`'s Lock
+job publishes the GitHub Release (with the lockfiles) before the image is
+built, and from then on that tag name is reserved for good: deleting the
+release and tag does not free it, and pushing the tag again fails with
+`GH013 ... Cannot create ref due to creations being restricted`.
 
-```shell
-git tag -d v0.1.0
-git push origin :refs/tags/v0.1.0
-gh release delete v0.1.0 --yes
-```
+So don't delete and re-push a tag. If a release is wrong (bad pins, failed
+build), fix it on `main` and tag the next version instead (e.g. `v0.1.3` was
+burned this way, so its fix shipped as `v0.1.4`). Leave the bad release in
+place, or mark it in its notes; deleting it only leaves a gap in the versions.
 
 ### Commit message helper
 
