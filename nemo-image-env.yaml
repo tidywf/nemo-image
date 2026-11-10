@@ -7,5 +7,5 @@ channels:
 dependencies:
   - r-nemo ==0.2.2
   - r-tidywigits ==0.2.2
-  - r-tidydragen ==0.1.1
+  - r-tidydragen ==0.1.2
   - awscli # for s3 sync
